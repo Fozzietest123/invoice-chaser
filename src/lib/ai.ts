@@ -1,8 +1,6 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY!);
 
 interface EmailGenParams {
   clientName: string;
@@ -21,6 +19,7 @@ export async function generateReminderEmail({
   daysOverdue,
   notes,
 }: EmailGenParams): Promise<{ subject: string; body: string }> {
+  
   // Determine tone based on days overdue
   let tone = 'friendly and casual';
   if (daysOverdue > 14) {
@@ -34,7 +33,7 @@ export async function generateReminderEmail({
   }
 
   const prompt = `
-    Write a professional invoice reminder email.
+    You are an AI assistant for an invoicing app. Write a professional invoice reminder email.
     
     Context:
     - Client Name: ${clientName}
@@ -50,28 +49,33 @@ export async function generateReminderEmail({
     - Keep it concise (under 150 words).
     - Include the invoice number in the subject line.
     - Do not use placeholder brackets like [Your Name]; sign off as "The Invoice Chaser Team".
-    - Do not include payment links unless specifically provided in notes (assume manual payment for now).
+    - Respond strictly in JSON format: { "subject": "Subject Here", "body": "Email body here" }.
   `;
 
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{ role: 'user', content: prompt }],
-    response_format: { type: 'json_object' }, 
-  });
-
-  const content = completion.choices[0].message.content;
-  
   try {
-    const parsed = JSON.parse(content || '{}');
+    // Use Gemini 1.5 Flash
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    // Clean up markdown formatting if present (Gemini sometimes adds ```json ... ```)
+    const cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+
+    const parsed = JSON.parse(cleanedText);
+    
     return {
       subject: parsed.subject || `Reminder: Invoice #${invoiceNumber}`,
       body: parsed.body || 'Error generating email body.',
     };
-  } catch (e) {
-    console.error("JSON Parse Error", e);
+
+  } catch (error) {
+    console.error('Gemini Generation Error:', error);
+    // Fallback in case of parsing error
     return {
       subject: `Reminder: Invoice #${invoiceNumber}`,
-      body: "Error generating AI content.",
+      body: `Hi ${clientName},\n\nThis is a reminder that invoice #${invoiceNumber} for $${amount.toFixed(2)} was due on ${dueDate}.\n\nPlease remit payment at your earliest convenience.\n\nBest,\nThe Invoice Chaser Team`,
     };
   }
 }
