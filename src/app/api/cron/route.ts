@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { generateReminderEmail } from '@/lib/openai';
+import { generateReminderEmail } from '@/lib/ai';
 import { sendReminderEmail } from '@/lib/supabase/resend';
 import { NextResponse } from 'next/server';
 import { differenceInDays, parseISO, format } from 'date-fns';
